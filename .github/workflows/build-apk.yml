@@ -16,21 +16,31 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      # المشروع مفيهوش gradlew، فبنستخدم نفس نسخة جريدل بتاعته
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 9.3.1
 
-      # ملف debug.keystore موجود في .gitignore فبنعمله هنا
+      # بيدور على مجلد المشروع تلقائي
+      - name: Find project directory
+        id: proj
+        run: |
+          f=$(find . -name settings.gradle.kts | head -n 1)
+          if [ -z "$f" ]; then
+            echo "settings.gradle.kts not found. Upload the project files, not the zip."
+            exit 1
+          fi
+          echo "dir=$(dirname "$f")" >> "$GITHUB_OUTPUT"
+
       - name: Create debug keystore
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: |
           keytool -genkeypair -v -keystore debug.keystore \
             -storepass android -alias androiddebugkey -keypass android \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
-      # اختياري: مفتاح Gemini من GitHub Secrets
       - name: Create .env
+        working-directory: ${{ steps.proj.outputs.dir }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
@@ -39,9 +49,10 @@ jobs:
           fi
 
       - name: Build debug APK
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: gradle assembleDebug --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: ${{ steps.proj.outputs.dir }}/app/build/outputs/apk/debug/*.apk
